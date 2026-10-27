@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理後台｜Timing Peace 環保行動</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.admin-main{max-width:960px;margin:24px auto 48px;padding:0 24px}
+.admin-head h1{color:var(--forest);margin:24px 0 6px}
+.admin-head p{color:#5c6660}
+.admin-card{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:24px;margin-bottom:20px}
+.admin-card h2{color:var(--forest);font-size:20px;margin-bottom:12px}
+.admin-label{display:block;font-weight:800;color:var(--forest);font-size:14px;margin:14px 0 6px}
+.admin-input{width:100%;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font:inherit;background:#fff;color:var(--ink)}
+.admin-input:focus{outline:3px solid #b59326;outline-offset:2px;border-color:var(--leaf)}
+select.admin-input{width:auto}
+input[type=file].admin-input{padding:10px}
+.admin-row{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px}
+.admin-row img{width:120px;height:90px;object-fit:cover;border-radius:6px;background:var(--mint)}
+.admin-row .meta{flex:1;font-size:14px}
+.admin-row .meta strong{color:var(--forest)}
+.admin-msg{min-height:24px;margin-top:10px;font-weight:700}
+.admin-msg.ok{color:var(--leaf)}
+.admin-msg.err{color:#b3201e}
+.admin-list{display:grid;gap:10px}
+.small-btns{display:flex;gap:10px;margin-top:14px}
+.hint{font-size:13px;color:#5c6660;margin-top:12px}
+</style>
+</head>
+<body>
+<header class="site-header" style="position:static">
+  <div class="navbar">
+    <a class="brand" href="index.html">Timing Peace 環保行動</a>
+    <div class="nav-links"><a href="index.html#gallery">回網站照片牆</a></div>
+  </div>
+</header>
+<main class="admin-main">
+  <div class="admin-head">
+    <h1>管理後台</h1>
+    <p>用你的 GitHub Token 登入。照片直接上傳到網站資料夾，發佈後約 1 分鐘全站照片牆就會更新。</p>
+  </div>
+
+  <div id="login-view" class="admin-card">
+    <h2>管理員登入</h2>
+    <label class="admin-label" for="tok">GitHub Token</label>
+    <input id="tok" class="admin-input" type="password" placeholder="github_pat_…（Fine-grained，只給 eco-site-v2 的 Contents 讀寫）" autocomplete="off">
+    <div class="small-btns">
+      <button class="button primary" id="login-btn" type="button">登入</button>
+    </div>
+    <p class="admin-msg" id="login-msg"></p>
+    <p class="hint">在 github.com → Settings → Developer settings → Fine-grained tokens 建立：Resource owner 選你自己的帳號、只選 eco-site-v2 這一個 repo、Contents 權限 Read and write。Token 只存在這台瀏覽器，登出即移除，不會上傳到任何其他伺服器。</p>
+  </div>
+
+  <div id="admin-view" hidden>
+    <div class="admin-card">
+      <h2>上傳照片</h2>
+      <label class="admin-label" for="file">照片檔（JPG/PNG，自動壓縮到 1400px 寬）</label>
+      <input id="file" class="admin-input" type="file" accept="image/*">
+      <label class="admin-label" for="cap">標題</label>
+      <input id="cap" class="admin-input" type="text" placeholder="例：內湖回收日：紙箱攤平集中運">
+      <label class="admin-label" for="cat">分類</label>
+      <select id="cat" class="admin-input">
+        <option>資源回收</option>
+        <option>淨灘</option>
+        <option>社區行動</option>
+        <option>校園講座</option>
+        <option>自然生態</option>
+        <option>其他</option>
+      </select>
+      <label class="admin-label" for="loc">地點（可留空）</label>
+      <input id="loc" class="admin-input" type="text" placeholder="例：台北市內湖區">
+      <label class="admin-label" for="date">日期</label>
+      <input id="date" class="admin-input" type="date">
+      <div class="small-btns">
+        <button class="button primary" id="up-btn" type="button">上傳並發佈</button>
+        <button class="button" id="logout-btn" type="button">登出</button>
+      </div>
+      <p class="admin-msg" id="msg"></p>
+    </div>
+    <div class="admin-card">
+      <h2>目前照片</h2>
+      <div class="admin-list" id="list"></div>
+    </div>
+  </div>
+</main>
+<script>
+const REPO='timing666xi-wq/eco-site-v2',API='https://api.github.com',PH='data/photos.json';
+const $=(id)=>document.getElementById(id);
+const token=()=>localStorage.getItem('tp_token');
+const b64=(s)=>btoa(unescape(encodeURIComponent(s)));
+const deb64=(s)=>decodeURIComponent(escape(atob(s.replace(/\n/g,''))));
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,opts){
+  const r=await fetch(API+'/repos/'+REPO+'/contents/'+path,Object.assign({},opts,{headers:{Accept:'application/vnd.github+json','Authorization':'Bearer '+token()}}));
+  return r;
+}
+function setMsg(el,t,ok){el.textContent=t;el.className='admin-msg '+(ok?'ok':'err');}
+function show(ok){$('login-view').hidden=!ok;$('admin-view').hidden=!ok;}
+async function loadList(){
+  const r=await api(PH);
+  if(!r.ok){setMsg($('msg'),'讀照片清單失敗：'+r.status,false);return;}
+  const cc=await r.json();
+  const d=JSON.parse(deb64(cc.content));
+  const ps=d.photos||[];
+  $('list').innerHTML=ps.length?ps.map((p,i)=>'<div class="admin-row"><img src="'+esc(p.image)+'" alt="">'+
+    '<div class="meta"><strong>'+esc(p.caption)+'</strong><br>'+esc(p.category)+(p.location?'・'+esc(p.location):'')+(p.date?'・'+esc(p.date):'')+'</div>'+
+    '<button class="button" type="button" data-i="'+i+'">從照片牆移除</button></div>').join(''):'<p>還沒有照片，上傳第一張吧。</p>';
+  [...$('list').querySelectorAll('button')].forEach(b=>b.addEventListener('click',()=>del(+b.dataset.i)));
+}
+async function login(){
+  const t=$('tok').value.trim();
+  if(!t){setMsg($('login-msg'),'請貼上 Token',false);return;}
+  localStorage.setItem('tp_token',t);
+  const r=await api(PH);
+  if(!r.ok){localStorage.removeItem('tp_token');setMsg($('login-msg'),'登入失敗（'+r.status+'）：Token 需對此 repo 有 Contents 讀寫權',false);return;}
+  setMsg($('login-msg'),'已登入',true);show(true);loadList();
+}
+function scale(file){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const w=Math.min(1400,img.width),h=Math.round(img.height*w/img.width);
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',0.82).split(',')[1]);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror=()=>res(null);
+    img.src=URL.createObjectURL(file);
+  });
+}
+async function upload(){
+  const f=$('file').files[0];
+  if(!f){setMsg($('msg'),'請先選照片',false);return;}
+  const cap=$('cap').value.trim();
+  if(!cap){setMsg($('msg'),'請填標題',false);return;}
+  setMsg($('msg'),'處理中…',true);
+  const b=await scale(f);
+  if(!b){setMsg($('msg'),'讀圖失敗，換一張 JPG/PNG',false);return;}
+  const name='p'+Date.now()+'.jpg';
+  const r1=await api('images/'+name,{method:'POST',body:JSON.stringify({message:'新增照片 '+cap,data:b})});
+  if(!r1.ok){setMsg($('msg'),'上傳失敗：'+r1.status+' '+(await r1.text()).slice(0,120),false);return;}
+  const c=await api(PH);const cc=await c.json();
+  const d=JSON.parse(deb64(cc.content));
+  d.photos.unshift({image:'images/'+name,caption:cap,category:$('cat').value,location:$('loc').value.trim(),date:$('date').value});
+  const r2=await api(PH,{method:'PUT',body:JSON.stringify({message:'更新照片牆',sha:cc.sha,data:b64(JSON.stringify(d,null,2))})});
+  if(!r2.ok){setMsg($('msg'),'清單更新失敗：'+r2.status,false);return;}
+  setMsg($('msg'),'已發佈「'+cap+'」，網站約 1 分鐘後更新',true);
+  $('file').value='';$('cap').value='';$('loc').value='';
+  loadList();
+}
+async function del(i){
+  const c=await api(PH);const cc=await c.json();
+  const d=JSON.parse(deb64(cc.content));
+  const p=d.photos.splice(i,1)[0];
+  const r=await api(PH,{method:'PUT',body:JSON.stringify({message:'移除照片 '+p.caption,sha:cc.sha,data:b64(JSON.stringify(d,null,2))})});
+  setMsg($('msg'),r.ok?('已從照片牆移除（檔案 '+p.image+' 留在 repo，要徹底刪請到 GitHub 刪檔）'):'移除失敗 '+r.status,r.ok);
+  loadList();
+}
+$('login-btn').addEventListener('click',login);
+$('up-btn').addEventListener('click',upload);
+$('logout-btn').addEventListener('click',()=>{localStorage.removeItem('tp_token');show(false);$('tok').value='';});
+if(token()){show(true);loadList();}
+$('date').valueAsDate=new Date();
+</script>
+</body>
+</html>

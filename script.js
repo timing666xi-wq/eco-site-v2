@@ -44,7 +44,7 @@ if('IntersectionObserver' in window && 'animate' in Element.prototype){
       anim.addEventListener('finish',rel,{once:true});anim.addEventListener('cancel',rel,{once:true});
     });
   },{threshold:0.08});
-  document.querySelectorAll('.section-heading,.guide-card,.event-card,.stat-item,.check-item,.cta-inner,.contact-card,.contact-form').forEach(el=>obs.observe(el));
+  document.querySelectorAll('.section-heading,.guide-card,.event-card,.stat-item,.check-item,.cta-inner,.contact-card,.contact-form,.photo-card,.photo-empty').forEach(el=>obs.observe(el));
 }
 reducedMotion.addEventListener('change',e=>{if(e.matches)runningReveals.forEach(a=>a.cancel());});
 document.addEventListener('focusin',e=>{runningReveals.forEach(a=>{if(a.effect.target.contains(e.target))a.cancel();});});
@@ -85,6 +85,18 @@ function show(code){
 if(input&&result){
   document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{input.value=c.dataset.code;show(c.dataset.code);}));
   input.addEventListener('input',()=>show(input.value));
+}
+
+// 零廢棄挑戰進度
+// 照片牆：渲染 data/photos.json（照片由管理後台上傳到 GitHub）
+const photoGrid=document.querySelector('#photo-grid');
+if(photoGrid){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  fetch('data/photos.json').then(r=>r.ok?r.json():{photos:[]}).then(d=>{
+    const ps=(d&&d.photos)||[];
+    if(!ps.length){photoGrid.innerHTML='<p class="photo-empty">目前還沒有照片。管理員在 <a href="admin.html">管理後台</a> 上傳後，照片會自動出現在這裡。</p>';return;}
+    photoGrid.innerHTML=ps.map(p=>'<figure class="photo-card"><img src="'+esc(p.image)+'" alt="'+esc(p.caption)+'" loading="lazy"><figcaption><p class="photo-cap">'+esc(p.caption)+'</p><p class="photo-meta">'+esc(p.category)+(p.location?'・'+esc(p.location):'')+(p.date?'・'+esc(p.date):'')+'</p></figcaption></figure>').join('');
+  }).catch(()=>{photoGrid.innerHTML='<p class="photo-empty">照片清單讀取失敗（請確認 data/photos.json 存在）。</p>';});
 }
 
 // 零廢棄挑戰進度
